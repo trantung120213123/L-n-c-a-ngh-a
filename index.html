@@ -12,7 +12,8 @@
     .message-content { display: inline-block; max-width: 70%; padding: 0.5rem 1rem; border-radius: 1rem; word-wrap: break-word; }
     .sent .message-content { background: linear-gradient(to right, #4f46e5, #7c3aed); color: white; }
     .received .message-content { background: #e5e7eb; color: black; }
-    img, video { max-width: 100%; border-radius: 0.5rem; max-height: 300px; }
+    img, video { max-width: 100%; border-radius: 0.5rem; max-height: 300px; cursor: pointer; }
+    img:hover { opacity: 0.8; transition: opacity 0.2s; }
     #messages { overflow-y: auto; max-height: 400px; padding: 10px; background: #f9fafb; }
     .toast { position: fixed; top: 20px; right: 20px; padding: 1rem; border-radius: 0.5rem; color: white; z-index: 1000; transform: translateX(100%); transition: transform 0.3s; }
     .toast.show { transform: translateX(0); }
@@ -21,6 +22,11 @@
     .loading { width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .optimistic { opacity: 0.7; transition: opacity 0.3s; }
+    /* Image Modal */
+    #imageModal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); }
+    #imageModal img { margin: auto; display: block; max-width: 90%; max-height: 90%; }
+    #closeModal { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; z-index: 1002; }
+    #closeModal:hover { color: #ccc; }
   </style>
 </head>
 <body class="bg-gradient-to-br from-blue-500 to-purple-600 h-screen flex items-center justify-center p-4">
@@ -63,6 +69,12 @@
 
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
+
+  <!-- Image Zoom Modal -->
+  <div id="imageModal">
+    <span id="closeModal">&times;</span>
+    <img id="modalImage" src="" alt="Zoom Image">
+  </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
@@ -207,11 +219,36 @@
       optimisticDivs.forEach(div => div.remove());
     });
 
+    // Image Modal Logic
+    function openImageModal(src) {
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImage');
+      modal.style.display = 'block';
+      modalImg.src = src;
+    }
+
+    function closeImageModal() {
+      document.getElementById('imageModal').style.display = 'none';
+    }
+
     // DOM ready
     document.addEventListener('DOMContentLoaded', () => {
       // Initial state: Hide chat, show login
       document.getElementById('chatContainer').classList.add('hidden');
       document.getElementById('loginBtn').disabled = true; // Disable until connected
+
+      // Image Modal Events
+      document.getElementById('closeModal').addEventListener('click', closeImageModal);
+      document.getElementById('imageModal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('imageModal')) closeImageModal();
+      });
+
+      // Event delegation for image clicks in messages
+      document.getElementById('messages').addEventListener('click', (e) => {
+        if (e.target.tagName === 'IMG') {
+          openImageModal(e.target.src);
+        }
+      });
 
       // Login form
       const loginForm = document.getElementById('loginForm');
@@ -326,4 +363,4 @@
     });
   </script>
 </body>
-  </html>
+</html>
