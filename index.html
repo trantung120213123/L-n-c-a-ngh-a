@@ -20,7 +20,7 @@
     .toast.success { background: #10b981; }
     .loading { width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    .optimistic { opacity: 0.7; transition: opacity 0.3s; } /* Fade in khi sync */
+    .optimistic { opacity: 0.7; transition: opacity 0.3s; }
   </style>
 </head>
 <body class="bg-gradient-to-br from-blue-500 to-purple-600 h-screen flex items-center justify-center p-4">
@@ -38,7 +38,7 @@
     <form id="loginForm">
       <input type="text" id="username" placeholder="Tài khoản (tung/gau)" class="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
       <input type="password" id="password" placeholder="Mật khẩu" class="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button type="submit" id="loginBtn" class="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition">Đăng Nhập</button>
+      <button type="submit" id="loginBtn" class="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition disabled:bg-gray-400">Đăng Nhập</button>
       <button type="button" id="testConnect" class="w-full mt-2 text-blue-500 underline hover:text-blue-700 text-sm">Test Kết Nối</button>
     </form>
     <p id="loginError" class="text-red-500 mt-2 hidden text-center">Sai thông tin!</p>
@@ -118,19 +118,20 @@
       div.innerHTML = `<small class="block text-gray-500 text-xs mb-1">${new Date(msg.created_at || new Date()).toLocaleTimeString('vi-VN')}</small>${content}`;
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
-      if (isOptimistic) pendingMessages.push(msg.id || Date.now()); // Track ID
+      if (isOptimistic) pendingMessages.push(msg.localId || Date.now()); // Track ID
     }
 
     function displayMessages(messages) {
       // Sync: Remove optimistic if server confirm
       messages.forEach(msg => {
-        if (pendingMessages.includes(msg.id)) {
-          // Find & remove optimistic div, replace by real
+        const pendingId = msg.localId || msg.id;
+        if (pendingMessages.includes(pendingId)) {
+          // Remove optimistic div
           const optimisticDivs = document.querySelectorAll('.optimistic');
           optimisticDivs.forEach(div => div.remove());
-          pendingMessages = pendingMessages.filter(id => id !== msg.id);
+          pendingMessages = pendingMessages.filter(id => id !== pendingId);
         }
-        addMessageLocally(msg);
+        addMessageLocally(msg, false);
       });
     }
 
@@ -139,18 +140,24 @@
       isConnected = true;
       console.log('Socket connected!');
       showLoading(false);
+      const loginBtn = document.getElementById('loginBtn');
+      loginBtn.disabled = false;
       if (currentUser) showToast('Kết nối ổn định!');
+      else showToast('Kết nối OK, sẵn sàng đăng nhập!');
     });
 
     socket.on('disconnect', (reason) => {
       isConnected = false;
       console.log('Socket disconnected:', reason);
+      const loginBtn = document.getElementById('loginBtn');
+      loginBtn.disabled = true;
       if (currentUser) showToast('Mất kết nối, thử lại...', 'error');
     });
 
     socket.on('connect_error', (error) => {
       console.error('Connect error:', error);
       showToast('Lỗi kết nối: ' + error.message, 'error');
+      document.getElementById('loginBtn').disabled = true;
     });
 
     socket.on('login_success', (data) => {
@@ -158,7 +165,7 @@
       currentUser = document.getElementById('username').value;
       currentReceiver = currentUser === 'tung' ? 'gau' : 'tung';
       document.getElementById('loginModal').style.display = 'none';
-      document.getElementById('chatContainer').classList.remove('hidden');
+      document.getElementById('chatContainer').style.display = 'flex'; // Force show chat
       document.getElementById('messageInput').focus();
       showLoading(false);
       showToast('Đăng nhập thành công!');
@@ -170,6 +177,9 @@
       document.getElementById('loginError').classList.remove('hidden');
       document.getElementById('loginError').textContent = data.message;
       setTimeout(() => document.getElementById('loginError').classList.add('hidden'), 3000);
+      const loginBtn = document.getElementById('loginBtn');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Đăng Nhập';
     });
 
     socket.on('load_messages', (messages) => {
@@ -191,6 +201,10 @@
 
     // DOM ready
     document.addEventListener('DOMContentLoaded', () => {
+      // Initial state: Hide chat, show login
+      document.getElementById('chatContainer').classList.add('hidden');
+      document.getElementById('loginBtn').disabled = true; // Disable until connected
+
       // Login form
       const loginForm = document.getElementById('loginForm');
       const loginBtn = document.getElementById('loginBtn');
@@ -200,6 +214,10 @@
         const password = document.getElementById('password').value;
         if (!username || !password) {
           showToast('Nhập đầy đủ!', 'error');
+          return;
+        }
+        if (!isConnected) {
+          showToast('Chờ kết nối ổn định!', 'error');
           return;
         }
         console.log('Attempting login:', { username, password });
@@ -228,12 +246,14 @@
         const text = document.getElementById('messageInput').value.trim();
         if (text && currentUser) {
           if (!isConnected) {
-            // Retry connect & queue
             socket.connect();
             showToast('Đang kết nối lại...', 'error');
             return;
           }
+          const localId = Date.now();
           const localMsg = {
+            id: localId, // For sync
+            localId: localId,
             sender: currentUser,
             receiver: currentReceiver,
             message_text: text,
@@ -268,7 +288,10 @@
           const { url } = await res.json();
           console.log('Upload URL:', url);
           const type = file.type.startsWith('image/') ? 'image' : 'video';
+          const localId = Date.now();
           const localMsg = {
+            id: localId,
+            localId: localId,
             sender: currentUser,
             receiver: currentReceiver,
             message_type: type,
@@ -289,16 +312,10 @@
       // Init connect check
       if (socket.connected) {
         isConnected = true;
+        document.getElementById('loginBtn').disabled = false;
         showToast('Kết nối sẵn sàng!', 'success');
       }
     });
-
-    // Reset login btn
-    socket.on('login_error', () => {
-      const loginBtn = document.getElementById('loginBtn');
-      loginBtn.disabled = false;
-      loginBtn.textContent = 'Đăng Nhập';
-    });
   </script>
 </body>
-  </html>
+</html>
