@@ -122,11 +122,19 @@
     }
 
     function displayMessages(messages) {
-      // Sync: Remove optimistic if server confirm
       messages.forEach(msg => {
+        // Skip if self-sent (echo from server) - already added optimistic
+        if (msg.sender === currentUser && pendingMessages.includes(msg.localId || msg.id)) {
+          // Just confirm optimistic (remove opacity)
+          const optimisticDivs = document.querySelectorAll('.optimistic');
+          optimisticDivs.forEach(div => div.classList.remove('optimistic'));
+          pendingMessages = pendingMessages.filter(id => id !== (msg.localId || msg.id));
+          return;
+        }
+        // Add received or non-pending
         const pendingId = msg.localId || msg.id;
         if (pendingMessages.includes(pendingId)) {
-          // Remove optimistic div
+          // Remove old optimistic if any
           const optimisticDivs = document.querySelectorAll('.optimistic');
           optimisticDivs.forEach(div => div.remove());
           pendingMessages = pendingMessages.filter(id => id !== pendingId);
@@ -318,4 +326,4 @@
     });
   </script>
 </body>
-</html>
+  </html>
